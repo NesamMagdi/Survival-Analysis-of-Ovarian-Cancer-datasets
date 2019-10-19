@@ -1,0 +1,461 @@
+---
+title: 'Survival Analysis: Ovarian Cancer'
+author: "Nesma Magdi"
+date: "October 18, 2019"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(Greg)
+library(dplyr)
+library(tidyr)
+library(finalfit)
+library(ggplot2)
+library(moments)
+library(e1071)
+library(dummies)
+library(dplyr)
+library(tidyr)
+library(finalfit)
+library(dummies)
+library(moments)
+library(corrplot)
+library(scatterplot3d)
+library(ggplot2)
+library(ggplot2)
+library(caret)
+library(GGally)
+library(ggthemes)
+library(broom)
+library(dplyr)
+library(bindrcpp)
+library(caTools)
+library(rattle)
+library(RColorBrewer)
+library(nnet)
+library(rpart.plot)
+library(dichromat)
+library(Rmpfr)
+library(digest)
+library(convertr)
+library(microbenchmark)
+library(varhandle)
+library(hablar)
+library(magrittr)
+library(survminer)
+library(markovchain)
+library(survival)
+library(expss)
+library(AMR)
+library(ggpubr)
+library(gplots)
+library(devtools)
+library(dmetar)
+library(grDevices)
+library(Hmisc)
+library(rattle)
+library(reshape)
+library(magrittr)
+library(ggpubr)
+library(gridExtra)
+library(PerformanceAnalytics)
+library(highcharter)
+library(car)
+```
+
+## Ovarian Cancer:
+
+Survival in a randomised trial comparing two treatments for ovarian cancer.
+Format
+
+Treatment of patients with advanced ovarian carcinoma (stages IIIB and IV) using either cyclophosphamide alone (1 g/m2) or cyclophosphamide (500 mg/m2) plus adriamycin (40 mg/m2) by iv injection every 3 weeks each produced partial regression in approximately one third of the patients.
+
+```{r ovarian, message=FALSE, warning=FALSE}
+
+data("ovarian")
+attach(ovarian)
+
+Status <- ifelse(fustat == 0,"Death", "Censord")
+Progression <- ifelse(resid.ds == 1, "No Progression", "Progression")
+Treatment <- ifelse(rx == 1, "Endoxan alone", "Endoxan + Adria")
+Performance <- ifelse(ecog.ps == 1, "High", "Low")
+dummy_Age <- ifelse(age >= 50 ,"Old","Young")
+
+ex <- data.frame(Status, Progression, Treatment, Performance, dummy_Age)
+
+Ovarian <- cbind(ovarian, ex)
+
+Ovarian$dummy_Age <- factor(Ovarian$dummy_Age)
+Ovarian$Status<- factor(Ovarian$Status)
+Ovarian$Progression <- factor(Ovarian$Progression)
+Ovarian$Treatment <- factor(Ovarian$Treatment)
+Ovarian$Performance <- factor(Ovarian$Performance)
+
+
+write.csv(Ovarian, file="ovarian.csv")
+ovarian <- read.csv(choose.files(), header = T)
+attach(ovarian)
+
+```
+
+## Descrition:
+
+```{r , echo=FALSE}
+
+Abbreviation <- c("futime", "fustat", "age", "resid.ds", "rx", "ecog.ps")
+
+Description <- c("Survival or Censoring time", "Censoring status", "Age in years", "Residual disease present", "Treatment Group", "ECOG Performance Status")
+
+Data <- as.data.frame(Description , Abbreviation)
+Data
+```
+
+```{r , echo=TRUE}
+
+summary(ovarian)
+
+```
+
+## First, Analysis of Variance:
+
+#1- Age:
+
+```{r warning=FALSE, , echo=TRUE}
+
+AGE_mean <- as.data.frame(ovarian %>%
+              summarise(count = n(), mean = mean(age, na.rm = T), sd = sd(age, na.rm = T)))
+AGE_mean
+
+summary(ovarian$age)
+ggplot(ovarian, aes(x= age)) + 
+  geom_histogram(aes(y=..count..), color = "black", fill="firebrick4")
+
+hist (age , col="bisque" , freq=FALSE)
+meanx <- mean( age )
+sdx <- sd (age)
+curve (dnorm(x , mean=mean(x) , sd=sd(x) ) ,
+from=min(age ) , to=max(age) , add=TRUE,
+lty=1, col="Black " , lwd=3)
+kernel <- density (age)
+points ( kernel$x  , kernel$y , type="l " ,
+lty=2, col="blue " , lwd=3)
+legend ("topleft" , c ("Normal " , "Kernel") , lty=c (1 ,2) ,
+bty="n" , cex=.9 , col=c (" black " , " blue "))
+
+
+
+ggboxplot(age, xlab = "Age") +
+  labs(x = "Age", y = "Count", main = "Age Normality", fill = "age") +
+  theme_economist()
+
+skewness(age)
+kurtosis(age)
+
+shapiro.test(age)
+t.test(age, mu=56.17,  conf.level = 0.95)
+
+```
+
+  Mean age of population of Intrest is 56.17 and standard Deviation is 10.1.
+  Age of Patients: From 38.89 To 74.5 years.
+  
+  The Distribution is moderatly Skewed & approximatly Symmetric, and Kurtosis is in acceptable range for bing normally distributed.
+
+From the output, the p-values= 0.4259 > the significance level 0.05, implying that the distribution of the data are not significantly different from the normal distribution.
+
+In other words, we can assume the normality, Normally Distributed.
+
+ The p-value of one sample t.test is 0.9982, which is greater than the significance level alpha = 0.05. We can conclude that average Ages is not significantly different from there mean with a p-value = 0.9982.
+ 
+===============================================================
+
+#2- Progression:
+
+```{r warning=FALSE, , echo=TRUE}
+
+Count_Prog <- table(ovarian$Progression)
+Percent_Prog <- prop.table(Count_Prog)*100
+
+Prog_persent <- as.data.frame(cbind(Count_Prog, Percent_Prog))
+Prog_persent
+
+
+ggplot(ovarian,aes(Progression, fill= Progression)) +
+  geom_bar(stat="count") +
+  theme_economist()
+
+chisq.test(Count_Prog)
+```
+
+The p-value of the Chi.Square test is 0.4328, which is greater than the significance level alpha = 0.05. We can conclude that Prgoression is significantly commonly distributed with a p-value = 0.4328.
+
+===============================================================
+
+#3- ECOG Performance Status:
+
+```{r warning=FALSE, , echo=TRUE}
+
+Count_per <- table(ovarian$Performance)
+Percent_per <- prop.table(Count_per)*100
+
+per_persent <- as.data.frame(cbind(Count_per, Percent_per))
+per_persent
+
+ggplot(ovarian,aes(Performance, fill= Performance)) +
+  geom_bar(stat="count") +
+  theme_economist()
+
+chisq.test(Count_per)
+```
+
+The p-value of the Chi.Square test is 0.6949, which is greater than the significance level alpha = 0.05. We can conclude that ECOG Performance Status is significantly commonly distributed with a p-value = 0.6949.
+
+********************************************************************************************************************************************************************************************************************************************************
+
+## Second, Survival Analysis:
+
+# Kaplan-Meier Estimator:
+
+```{r warning=FALSE, , echo=TRUE}
+
+survobj <- with(ovarian, Surv(futime, fustat))
+
+surviv <- survfit(survobj ~ 1, data = ovarian)
+summary(surviv)
+
+plot(surviv, xlab = "Survival Time in Days", ylab = "% Surviving", yscale = 100, main = "Survival Distribution (Overall)")
+
+ggsurvplot(surviv, data = ovarian, pval = TRUE)
+
+```
+ 
+## 1- Compare the Survival Distribution Between Old and Young Female Patients (Survival Curves):
+
+```{r warning=FALSE, , echo=TRUE}
+
+surviv1 <- survfit(survobj ~ dummy_Age, data = ovarian)
+surviv1
+
+plot(surviv1, xlab = "Survival Time in Months", ylab = "% Surviving", yscale = 100, 
+     col = c("dodgerblue4", "firebrick4"),
+     main = "Survival Distribution Between Different ages")
+     
+     legend("topright", title = "Ages", c("Old", "Young"),
+     fill= c("dodgerblue4", "firebrick4"))
+     
+ggsurvplot(surviv1, data = ovarian, pval = TRUE)
+
+survdiff(survobj ~ dummy_Age, data = ovarian)
+```
+
+p-value = 0.1, This means Median Survival Time of old and young patients is not Significantly different.
+
+===============================================================
+ 
+## 2- Compare the Survival Distribution of Different Progression Status (Survival Curves):
+
+```{r warning=FALSE, , echo=TRUE}
+
+surviv2 <- survfit(survobj ~ ovarian$Progression, data = ovarian)
+surviv2
+
+plot(surviv2, xlab = "Survival Time in Months", ylab = "% Surviving", yscale = 100, 
+     col = c("dodgerblue4", "firebrick4"),
+     main = "Survival Distribution Between Different Progression")
+     legend("topright", title = "Progression", c("Yes", "No"),
+     fill= c("dodgerblue4", "firebrick4"))
+     
+ggsurvplot(surviv2, data = ovarian, pval = TRUE)
+
+survdiff(survobj ~ ovarian$Progression, data = ovarian)
+```
+
+p-value = 0.6, This means Median Survival Time between different progression status is not Significantly different.
+
+===============================================================
+ 
+## 3- Compare the Survival Distribution of Different Performance Status (Survival Curves):
+
+```{r warning=FALSE, , echo=TRUE}
+
+surviv3 <- survfit(survobj ~ ovarian$Performance, data = ovarian)
+surviv3
+
+plot(surviv3, xlab = "Survival Time in Months", ylab = "% Surviving", yscale = 100, 
+     col = c("dodgerblue4", "firebrick4"),
+     main = "Survival Distribution Between Different Performance")
+     legend("topright", title = "Performance", c("Low", "High"),
+     fill= c("dodgerblue4", "firebrick4"))
+     
+ggsurvplot(surviv3, data = ovarian, pval = TRUE)
+
+survdiff(survobj ~ ovarian$Performance, data = ovarian)
+```
+
+p-value = 0.5, This means Median Survival Time between different performance status is not Significantly different.
+
+===============================================================
+ 
+## 4- Compare the Survival Distribution of Different Treatments (Survival Curves):
+
+```{r warning=FALSE, , echo=TRUE}
+
+surviv4 <- survfit(survobj ~ ovarian$Treatment, data = ovarian)
+surviv4
+summary(surviv4)
+
+plot(surviv4, xlab = "Survival Time in Months", ylab = "% Surviving", yscale = 100, 
+     col = c("dodgerblue4", "firebrick4"),
+     main = "Survival Distribution Between Treatments")
+     legend("topright", title = "Performance", c("Endoxan + Adria", "Endoxan alone"),
+     fill= c("dodgerblue4", "firebrick4"))
+     
+ggsurvplot(surviv4, data = ovarian, pval = TRUE)
+
+survdiff(survobj ~ ovarian$Treatment, data = ovarian)
+```
+
+p-value = 0.3, This means Median Survival Time after using  different Treatment Regimens is not Significantly different.
+Though, patients receiving Cyclophosphamide alone are doing better in the first month of follow-up. 
+
+===============================================================
+ 
+## 4- Progression Free Survival:
+
+```{r warning=FALSE, , echo=TRUE}
+
+stat1 <- survfit(Surv(futime, fustat) ~ 1, data = ovarian)
+Prog1 <- survfit(Surv(futime, resid.ds) ~ 1, data = ovarian)
+
+Fitting <- list(OS = stat1, PFS = Prog1)
+Fitting
+ggsurvplot_combine(Fitting, ovarian)
+ggsurvplot(Fitting, data = ovarian, pval = TRUE)
+```
+
+********************************************************************************************************************************************************************************************************************************************************
+
+## Third, Cox Regression:
+
+# refrence = Endoxan alone:
+
+```{r warning=FALSE, , echo=TRUE}
+
+survobj <- with(ovarian, Surv(futime, fustat))
+
+Model1 <- coxph(survobj ~ rx, data = ovarian)
+summary(Model1)
+
+```
+ 
+1- Regression Coeffecient = -0.5964, Negative sign means Risk of Death is lower when using Cyclophophamide alone.
+2- Patients using Cyclophophamide alone has lower risk of death than using Cyclophophamide & Adriamycin.
+3- The effect size of age as a covarience = 0.55, This mean:
+Taking Cyclophophamide alone reduce hazard of death by 45%.
+
+```{r warning=FALSE, , echo=TRUE}
+
+progobj <- with(ovarian, Surv(futime, resid.ds))
+
+Model11 <- coxph(progobj ~ rx, data = ovarian)
+summary(Model11)
+
+```
+ 
+1- Regression Coeffecient = -0.5104, Negative sign means Risk of Progression is lower when using Cyclophophamide alone.
+2- Patients using Cyclophophamide alone has lower risk of Progression than using Cyclophophamide & Adriamycin.
+3- The effect size of age as a covarience = 0.6, This mean:
+Taking Cyclophophamide alone reduce hazard of Progression by 40%.
+
+===============================================================
+
+# Survival per Treatment from other variables:
+
+* Hazard of Death from ovarian cancer considering th Covarience:
+
+```{r warning=FALSE, , echo=TRUE}
+
+Model2 <- coxph(survobj ~ rx+  age + resid.ds + ecog.ps, data = ovarian)
+summary(Model2)
+ggforest(Model2, data = ovarian)
+
+```
+
+1- Older Patients has higher risk of death, this risk is significant (p-value = 0.00777)
+2- likelihood ratio test Significance decreased from 0.3 to 0.002.
+
+
+# Evaluate Proportional Hazard Assumption:
+
+```{r warning=FALSE, , echo=TRUE}
+
+cox.zph(Model2)
+par(mfrow = c(2, 4))
+plot(cox.zph(Model2), data = ovarian)
+```
+
+# By using the Schoenfeld residuals against the transformed time:
+
+From the output above, the test is not statistically significant for each of the covariates, and the global test
+is also not statistically significant. Therefore, we can assume the proportional hazards.
+
+1- rho: Pearson's correlation between the scaled Shoenfeld residuals and Time. The value of ecog.ps has
+higher corralation (0.4845) from over covariate, and resid.ds has the least corrlation (-0.1417). All in positive direction except age and resid.ds in Negative direction.
+
+2- chisq: The correlation coefficient follows a chi-square distribution and the statistic is present in the second column.
+
+3- p-value: P value is given for each covariate.
+
+4- For the global test there is no correlation and NA is entered into the cell.
+
+************************************************************************************************************************************************************************************************************************************************************
+
+# Progression Free Survival per Treatment from other variables:
+
+* Hazard of Progression from ovarian cancer considering th Covarience:
+
+```{r warning=FALSE, , echo=TRUE}
+
+progobj <- with(ovarian, Surv(futime, resid.ds))
+
+Model22 <- coxph(progobj ~ rx+  age + fustat + ecog.ps, data = ovarian)
+
+summary(Model22)
+
+ggforest(Model22, data = ovarian)
+
+```
+
+1- Older Patients has higher risk of Progression, this risk is significant (p-value = 0.00403)
+2- Different in Status has higher risk of Progression, this risk is significant (p-value = 0.00303)
+3- High Performance Status has Lower risk of Progression, this risk is significant (p-value = 0.02030)
+
+# Evaluate Proportional Hazard Assumption:
+
+```{r warning=FALSE, , echo=TRUE}
+
+cox.zph(Model22)
+par(mfrow = c(2, 4))
+plot(cox.zph(Model22), data = ovarian)
+```
+
+# By using the Schoenfeld residuals against the transformed time:
+
+From the output above, the test is not statistically significant for each of the covariates, and the global test
+is also not statistically significant. Therefore, we can assume the proportional hazards.
+
+1- rho: Pearson's correlation between the scaled Shoenfeld residuals and Time. The value of ecog.ps has higher corralation (0.194) from over covariate, and age has the least corrlation (-0.300). All in positive direction except age and fustat in Negative direction.
+
+2- chisq: The correlation coefficient follows a chi-square distribution and the statistic is present in the second column.
+
+3- p-value: P value is given for each covariate.
+
+4- For the global test there is no correlation and NA is entered into the cell.
+
+************************************************************************************************************************************************************************************************************************************************************
+
+
+
